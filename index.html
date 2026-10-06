@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>대진전자통신고등학교 학사일정 및 행사 알리미</title>
+  <meta name="description" content="NEIS 나이스 공식 학사일정 연동 인터랙티브 캘린더, 맞춤형 브리핑 알림, 중요 일정 D-Day 및 행사 상세 안내 서비스">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700;800&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <!-- Top Navigation Header -->
+    <header class="app-header">
+      <div class="header-left">
+        <div class="school-badge">
+          <div class="badge-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
+              <path d="M6 12v5c3 3 9 3 12 0v-5"/>
+            </svg>
+          </div>
+          <div class="school-meta">
+            <div class="school-title-row">
+              <h1 class="school-name" id="currentSchoolName">대진전자통신고등학교</h1>
+              <span class="status-pill online" id="syncStatusPill">
+                <span class="pulse-dot"></span> NEIS 실시간 연동
+              </span>
+            </div>
+            <p class="school-sub" id="currentSchoolSub">부산광역시교육청 · 코드 7150597 · 학사일정 & 행사 알리미</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <!-- School Switcher Button -->
+        <button class="btn btn-secondary" id="btnSchoolSearchModal" title="학교 변경 및 검색">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          <span>타 학교 조회</span>
+        </button>
+
+        <!-- Briefing Notification Button -->
+        <button class="btn btn-primary" id="btnOpenNotificationSettings" title="맞춤 알림 설정">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/>
+            <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>
+          </svg>
+          <span>맞춤 브리핑 알림</span>
+          <span class="active-badge-indicator" id="notifActiveIndicator" style="display:none;">ON</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Today's Live Briefing Banner -->
+    <section class="briefing-banner" id="briefingBanner">
+      <div class="banner-inner">
+        <div class="banner-tag">
+          <span class="sound-wave"><span></span><span></span><span></span></span>
+          <span>오늘의 학사 브리핑</span>
+          <span class="banner-date" id="bannerTodayDate">2026년 10월 6일 (화)</span>
+        </div>
+        <div class="banner-content" id="bannerContent">
+          <p class="banner-loading">NEIS 최신 학사일정을 불러오는 중입니다...</p>
+        </div>
+        <button class="btn btn-ghost banner-action" id="btnSimulateBriefing" title="지금 즉시 브리핑 알림 받기">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="5 3 19 12 5 21 5 3"></polygon>
+          </svg>
+          즉시 알림 테스트
+        </button>
+      </div>
+    </section>
+
+    <!-- Main Dashboard Layout (Grid) -->
+    <main class="dashboard-grid">
+      <!-- Left / Top: Interactive Calendar Card -->
+      <section class="dashboard-card calendar-card">
+        <!-- Calendar Toolbar -->
+        <div class="card-header calendar-toolbar">
+          <div class="nav-cluster">
+            <button class="icon-btn" id="btnPrevMonth" title="이전">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+            </button>
+            <h2 class="current-period-label" id="currentPeriodLabel">2026년 10월</h2>
+            <button class="icon-btn" id="btnNextMonth" title="다음">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+            <button class="btn btn-xs btn-today" id="btnGoToday">오늘</button>
+          </div>
+
+          <!-- View Mode & Category Filters -->
+          <div class="toolbar-controls">
+            <!-- View Selector (Month / Week) -->
+            <div class="seg-control">
+              <button class="seg-btn active" id="viewModeMonth" data-view="month">월간</button>
+              <button class="seg-btn" id="viewModeWeek" data-view="week">주간</button>
+            </div>
+
+            <!-- Grade Filter -->
+            <select class="select-input" id="gradeFilter" title="학년별 필터">
+              <option value="all">전체 학년</option>
+              <option value="1">1학년</option>
+              <option value="2">2학년</option>
+              <option value="3">3학년</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Filter Badges / Category Toggles -->
+        <div class="category-filter-bar">
+          <span class="filter-label">유형 필터:</span>
+          <button class="cat-pill active" data-cat="all">전체</button>
+          <button class="cat-pill" data-cat="exam"><span class="dot dot-exam"></span>시험/평가</button>
+          <button class="cat-pill" data-cat="vacation"><span class="dot dot-vacation"></span>방학/개학</button>
+          <button class="cat-pill" data-cat="festival"><span class="dot dot-festival"></span>축제/행사</button>
+          <button class="cat-pill" data-cat="holiday"><span class="dot dot-holiday"></span>공휴/재량휴업</button>
+          <button class="cat-pill" data-cat="regular"><span class="dot dot-regular"></span>일반일정</button>
+        </div>
+
+        <!-- Calendar Body Container -->
+        <div class="calendar-view-container" id="calendarContainer">
+          <!-- Calendar will be dynamically rendered here -->
+        </div>
+      </section>
+
+      <!-- Right Sidebar: Highlights, D-Days, Upcoming Events -->
+      <aside class="dashboard-sidebar">
+        <!-- Card 1: D-Day Countdown -->
+        <div class="dashboard-card dday-card">
+          <div class="card-header">
+            <div class="card-title-group">
+              <span class="card-badge-icon">⏳</span>
+              <h3 class="card-title">주요 일정 D-Day</h3>
+            </div>
+            <button class="btn btn-xs btn-ghost" id="btnCustomDdayModal">+ 직접 추가</button>
+          </div>
+          <div class="dday-list" id="ddayList">
+            <!-- D-Day items will be rendered here -->
+          </div>
+        </div>
+
+        <!-- Card 2: Student Highlight Events (인기/기대 행사) -->
+        <div class="dashboard-card highlights-card">
+          <div class="card-header">
+            <div class="card-title-group">
+              <span class="card-badge-icon">✨</span>
+              <h3 class="card-title">학생 기대 행사 하이라이트</h3>
+            </div>
+            <span class="badge-accent">PICK</span>
+          </div>
+          <div class="highlight-list" id="highlightList">
+            <!-- Highlights rendered here -->
+          </div>
+        </div>
+
+        <!-- Card 3: Selected Date Events Quick Panel -->
+        <div class="dashboard-card selected-day-card" id="selectedDayCard">
+          <div class="card-header">
+            <div class="card-title-group">
+              <span class="card-badge-icon">📅</span>
+              <h3 class="card-title" id="selectedDateTitle">선택한 날짜 일정</h3>
+            </div>
+          </div>
+          <div class="selected-day-events" id="selectedDayEvents">
+            <p class="placeholder-text">달력에서 날짜를 클릭하면 상세 일정이 표시됩니다.</p>
+          </div>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <!-- MODAL: Event Detail Modal -->
+  <div class="modal-backdrop" id="eventDetailModal" style="display:none;">
+    <div class="modal-window">
+      <div class="modal-header">
+        <div class="modal-badge-wrapper" id="modalEventCategoryBadge">학사일정</div>
+        <button class="modal-close" id="btnCloseEventModal" aria-label="닫기">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-date-tag" id="modalEventDate">2026. 10. 20 (화)</div>
+        <h2 class="modal-event-title" id="modalEventTitle">중간고사</h2>
+        
+        <div class="modal-meta-grid">
+          <div class="meta-item">
+            <span class="meta-label">대상 학년</span>
+            <span class="meta-val" id="modalEventTargetGrade">전체</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">수업 공제 여부</span>
+            <span class="meta-val" id="modalEventDeduct">해당없음</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">D-Day</span>
+            <span class="meta-val highlight" id="modalEventDDay">D-14</span>
+          </div>
+        </div>
+
+        <div class="modal-section">
+          <h4 class="section-title">행사 설명 및 상세 안내</h4>
+          <div class="modal-description-box" id="modalEventContent">
+            등록된 행사 세부 정보가 표시됩니다.
+          </div>
+        </div>
+
+        <div class="modal-section tips-section" id="modalEventTips">
+          <!-- Helpful advice or study tip for this event -->
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="btnToggleBookmark">
+          <span id="bookmarkIcon">⭐</span> 중요 일정(D-Day)에 고정
+        </button>
+        <button class="btn btn-primary" id="btnCloseEventModalBtn">확인</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Notification & Briefing Settings -->
+  <div class="modal-backdrop" id="notificationModal" style="display:none;">
+    <div class="modal-window">
+      <div class="modal-header">
+        <h3>맞춤형 일일 브리핑 & 알림 설정</h3>
+        <button class="modal-close" id="btnCloseNotifModal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-instruction">
+          설정한 시간에 당일 학사일정과 남은 주요 D-Day를 요약하여 브라우저 알림으로 전달합니다.
+        </p>
+
+        <div class="setting-row">
+          <label class="setting-label" for="notifTimeInput">일일 브리핑 시간</label>
+          <input type="time" id="notifTimeInput" class="time-input" value="08:00">
+        </div>
+
+        <div class="setting-row">
+          <label class="setting-label">브라우저 알림 권한</label>
+          <div class="setting-action">
+            <span class="perm-status" id="notifPermStatus">확인 중...</span>
+            <button class="btn btn-xs btn-outline" id="btnRequestNotifPerm">권한 요청</button>
+          </div>
+        </div>
+
+        <div class="setting-row toggle-row">
+          <div>
+            <div class="setting-label">알림 자동 활성화</div>
+            <div class="setting-sub">지정한 시간에 자동으로 데스크톱/모바일 푸시 알림</div>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="notifAutoSwitch" checked>
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="preview-box">
+          <div class="preview-header">
+            <span>🔔 알림 미리보기</span>
+          </div>
+          <p class="preview-text" id="notifPreviewText">
+            "좋은 아침입니다! 대진전자통신고등학교의 오늘 일정: 중간고사 (1·2학년) 외 1건이 진행됩니다."
+          </p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" id="btnTestNotifNow">지금 테스트 알림 보내기</button>
+        <button class="btn btn-primary" id="btnSaveNotifSettings">설정 저장</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: School Search & Change -->
+  <div class="modal-backdrop" id="schoolSearchModal" style="display:none;">
+    <div class="modal-window">
+      <div class="modal-header">
+        <h3>학교 변경 및 타 학교 조회</h3>
+        <button class="modal-close" id="btnCloseSchoolModal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-instruction">
+          전국 초·중·고등학교 이름을 검색하거나 학교 코드를 직접 입력하여 NEIS 공식 일정을 조회할 수 있습니다.
+        </p>
+
+        <div class="search-input-wrapper">
+          <input type="text" id="schoolSearchInput" class="text-input" placeholder="학교명 검색 (예: 대진전자통신고등학교, 부산소프트웨어...)">
+          <button class="btn btn-primary" id="btnRunSchoolSearch">검색</button>
+        </div>
+
+        <div class="quick-preset-chips">
+          <span class="preset-label">추천:</span>
+          <button class="chip" data-name="대진전자통신고등학교" data-office="C10" data-code="7150597">대진전자통신고 (기본)</button>
+          <button class="chip" data-name="부산소프트웨어마이스터고등학교" data-office="C10" data-code="7150658">부산소프트웨어고</button>
+          <button class="chip" data-name="부산전자공업고등학교" data-office="C10" data-code="7150106">부산전자공고</button>
+        </div>
+
+        <div class="school-result-list" id="schoolResultList">
+          <p class="placeholder-text">학교명을 입력하고 검색을 누르면 결과가 표시됩니다.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Custom D-Day Add -->
+  <div class="modal-backdrop" id="customDdayModal" style="display:none;">
+    <div class="modal-window">
+      <div class="modal-header">
+        <h3>나만의 D-Day 추가</h3>
+        <button class="modal-close" id="btnCloseCustomDdayModal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="setting-row">
+          <label class="setting-label" for="customDdayTitle">일정 / 목표 이름</label>
+          <input type="text" id="customDdayTitle" class="text-input" placeholder="예: 정보처리기능사 실기, 프로젝트 마감">
+        </div>
+        <div class="setting-row">
+          <label class="setting-label" for="customDdayDate">목표 날짜</label>
+          <input type="date" id="customDdayDate" class="text-input">
+        </div>
+        <div class="setting-row">
+          <label class="setting-label" for="customDdayCategory">카테고리</label>
+          <select id="customDdayCategory" class="select-input">
+            <option value="exam">자격증 / 시험</option>
+            <option value="festival">축제 / 대회</option>
+            <option value="vacation">방학 / 여행</option>
+            <option value="regular">개인 목표</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" id="btnCancelCustomDday">취소</button>
+        <button class="btn btn-primary" id="btnSaveCustomDday">추가하기</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification System -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
