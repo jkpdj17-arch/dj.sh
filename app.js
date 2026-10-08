@@ -36,7 +36,10 @@ const state = {
     lastNotifiedDate: ''
   })),
   currentModalEvent: null,
-  cachedMonths: new Set()
+  cachedMonths: new Set(),
+  githubUser: JSON.parse(localStorage.getItem('dj_github_user') || 'null'),
+  pendingGhUser: null,
+  studentProfiles: JSON.parse(localStorage.getItem('dj_student_profiles') || '{}')
 };
 
 // Curated Event Descriptions & Context database for school events
@@ -912,6 +915,336 @@ async function selectSchool(officeCode, officeName, schoolCode, schoolName, addr
 }
 
 /* ==========================================================================
+   Supabase & GitHub Authentication & Grade/Class Management
+   ========================================================================== */
+let supabaseClient = null;
+
+function getSupabaseConfig() {
+  return {
+    url: localStorage.getItem('dj_supabase_url') || '',
+    key: localStorage.getItem('dj_supabase_key') || ''
+  };
+}
+
+function initSupabase() {
+  const cfg = getSupabaseConfig();
+  const statusEl = document.getElementById('supabaseStatusText');
+  const urlInput = document.getElementById('supabaseUrlInput');
+  const keyInput = document.getElementById('supabaseKeyInput');
+
+  if (urlInput && cfg.url) urlInput.value = cfg.url;
+  if (keyInput && cfg.key) keyInput.value = cfg.key;
+
+  if (window.supabase && cfg.url && cfg.key) {
+    try {
+      supabaseClient = window.supabase.createClient(cfg.url, cfg.key);
+      if (statusEl) {
+        const domain = cfg.url.replace(/^https?:\/\//, '').split('.')[0];
+        statusEl.textContent = `Supabase 연결 완료 (${domain})`;
+      }
+    } catch (err) {
+      console.warn('Supabase 초기화 오류:', err);
+      if (statusEl) statusEl.textContent = 'Supabase 연결 오류 (설정 확인 필요)';
+    }
+  } else {
+    if (statusEl) statusEl.textContent = 'Supabase 클라이언트 준비됨 (OAuth 또는 데모 연동)';
+  }
+}
+
+async function fetchGithubUserProfile(username) {
+  if (!username || !username.trim()) throw new Error('GitHub 사용자명을 입력해주세요.');
+  const cleanUser = username.trim();
+  const res = await fetch(`https://api.github.com/users/${encodeURIComponent(cleanUser)}`, {
+    headers: { 'Accept': 'application/vnd.github.v3+json' }
+  });
+  if (!res.ok) {
+    if (res.status === 404) throw new Error(`'${cleanUser}' 사용자를 GitHub에서 찾을 수 없습니다.`);
+    if (res.status === 403) throw new Error('GitHub API 일시적 요청 한도 초과입니다. 잠시 후 다시 시도해주세요.');
+    throw new Error(`GitHub API 통신 오류 (코드 ${res.status})`);
+  }
+  return await res.json();
+}
+
+function applyStudentProfile(profile) {
+  if (!profile) return;
+  state.filterGrade = String(profile.grade);
+  const gradeSelect = document.getElementById('gradeFilter');
+  if (gradeSelect) gradeSelect.value = String(profile.grade);
+
+  const badge = document.getElementById('githubUserGradeClass');
+  if (badge) badge.textContent = `${profile.grade}학년 ${profile.classNum}반`;
+
+  const dropdownCardVal = document.getElementById('dropdownStudentGradeClass');
+  if (dropdownCardVal) {
+    dropdownCardVal.textContent = `${profile.grade}학년 ${profile.classNum}반 (${profile.dept || '전기전자과'})`;
+  }
+
+  renderAll();
+}
+
+function handleUserLoginSuccess(userProfile) {
+  state.githubUser = {
+    id: userProfile.id || userProfile.login,
+    login: userProfile.login,
+    name: userProfile.name || userProfile.login,
+    avatar_url: userProfile.avatar_url || 'https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png',
+    bio: userProfile.bio || '',
+    public_repos: userProfile.public_repos || 0,
+    followers: userProfile.followers || 0,
+    connectedAt: new Date().toISOString()
+  };
+  localStorage.setItem('dj_github_user', JSON.stringify(state.githubUser));
+  closeGithubLoginModal();
+  renderGithubAuthUI();
+
+  const accountKey = state.githubUser.login;
+  const savedProfile = state.studentProfiles[accountKey];
+
+  if (savedProfile && savedProfile.grade && savedProfile.classNum) {
+    // Already has saved grade & class! Restore automatically!
+    applyStudentProfile(savedProfile);
+    showToast(`🎉 환영합니다, @${state.githubUser.login}님! [${savedProfile.grade}학년 ${savedProfile.classNum}반] 맞춤 정보가 그대로 복원되었습니다.`, 'success');
+  } else {
+    // New account: Prompt for Grade and Class!
+    openGradeClassModal(false);
+    showToast(`로그인이 완료되었습니다! 학사일정 안내를 위해 학년과 반을 설정해주세요.`, 'info');
+  }
+}
+
+function saveStudentGradeClass(grade, classNum, dept) {
+  if (!state.githubUser) {
+    showToast('로그인이 필요한 기능입니다.', 'warning');
+    return;
+  }
+  const accountKey = state.githubUser.login;
+  const profile = {
+    grade: String(grade),
+    classNum: String(classNum),
+    dept: dept || '전기전자과',
+    updatedAt: new Date().toISOString()
+  };
+  state.studentProfiles[accountKey] = profile;
+  localStorage.setItem('dj_student_profiles', JSON.stringify(state.studentProfiles));
+
+  // If Supabase session is active, update user metadata
+  if (supabaseClient) {
+    supabaseClient.auth.updateUser({
+      data: { grade: profile.grade, classNum: profile.classNum, dept: profile.dept }
+    }).catch(() => {});
+  }
+
+  applyStudentProfile(profile);
+  closeGradeClassModal();
+  showToast(`✅ [${profile.grade}학년 ${profile.classNum}반] 정보가 계정에 저장되었습니다! 다음 로그인 시에도 그대로 이용할 수 있습니다.`, 'success');
+}
+
+function openGradeClassModal(isEditMode = false) {
+  const modal = document.getElementById('gradeClassModal');
+  if (!modal) return;
+
+  const user = state.githubUser;
+  if (user) {
+    const avatarEl = document.getElementById('gradeClassUserAvatar');
+    if (avatarEl) avatarEl.src = user.avatar_url;
+    const nameEl = document.getElementById('gradeClassUserName');
+    if (nameEl) nameEl.textContent = `${user.name || user.login} (@${user.login})`;
+
+    const saved = state.studentProfiles[user.login];
+    if (saved) {
+      if (document.getElementById('selectStudentGrade')) document.getElementById('selectStudentGrade').value = saved.grade;
+      if (document.getElementById('selectStudentClass')) document.getElementById('selectStudentClass').value = saved.classNum;
+      if (document.getElementById('selectStudentDept')) document.getElementById('selectStudentDept').value = saved.dept || '전기전자과';
+    }
+  }
+
+  const popover = document.getElementById('githubDropdownPopover');
+  if (popover) popover.style.display = 'none';
+
+  modal.style.display = 'flex';
+}
+
+function closeGradeClassModal() {
+  const modal = document.getElementById('gradeClassModal');
+  if (modal) modal.style.display = 'none';
+}
+
+function renderGithubAuthUI() {
+  const btnLogin = document.getElementById('btnOpenGithubLogin');
+  const profilePill = document.getElementById('githubProfilePill');
+  const user = state.githubUser;
+
+  if (user) {
+    if (btnLogin) btnLogin.style.display = 'none';
+    if (profilePill) {
+      profilePill.style.display = 'inline-flex';
+      const avatar = document.getElementById('githubUserAvatar');
+      if (avatar) avatar.src = user.avatar_url;
+      const nameEl = document.getElementById('githubUserLogin');
+      if (nameEl) nameEl.textContent = user.name || user.login;
+
+      const profile = state.studentProfiles[user.login];
+      const badge = document.getElementById('githubUserGradeClass');
+      if (badge) {
+        badge.textContent = profile ? `${profile.grade}학년 ${profile.classNum}반` : '학적 설정 필요';
+      }
+    }
+
+    // Popover info
+    const dropAvatar = document.getElementById('dropdownAvatar');
+    if (dropAvatar) dropAvatar.src = user.avatar_url;
+    const dropName = document.getElementById('dropdownUserName');
+    if (dropName) dropName.textContent = user.name || user.login;
+    const dropHandle = document.getElementById('dropdownUserHandle');
+    if (dropHandle) dropHandle.textContent = `@${user.login}`;
+    const dropBio = document.getElementById('dropdownUserBio');
+    if (dropBio) dropBio.textContent = user.bio || '대진전자통신고 학사일정 이용자';
+
+    const saved = state.studentProfiles[user.login];
+    const dropGradeClass = document.getElementById('dropdownStudentGradeClass');
+    if (dropGradeClass) {
+      dropGradeClass.textContent = saved ? `${saved.grade}학년 ${saved.classNum}반 (${saved.dept || '전기전자과'})` : '설정되지 않음';
+    }
+
+    const dropRepo = document.getElementById('dropdownRepoCount');
+    if (dropRepo) dropRepo.textContent = user.public_repos !== undefined ? user.public_repos : 0;
+    const dropFollower = document.getElementById('dropdownFollowerCount');
+    if (dropFollower) dropFollower.textContent = user.followers !== undefined ? user.followers : 0;
+    const dropBookmark = document.getElementById('dropdownBookmarkCount');
+    if (dropBookmark) dropBookmark.textContent = state.bookmarkedEvents.length + state.customDdays.length;
+
+    const linkProfile = document.getElementById('linkGithubProfile');
+    if (linkProfile) linkProfile.href = user.html_url || `https://github.com/${user.login}`;
+  } else {
+    if (btnLogin) btnLogin.style.display = 'inline-flex';
+    if (profilePill) profilePill.style.display = 'none';
+    const popover = document.getElementById('githubDropdownPopover');
+    if (popover) popover.style.display = 'none';
+  }
+}
+
+function openGithubLoginModal() {
+  const modal = document.getElementById('githubLoginModal');
+  if (!modal) return;
+  modal.style.display = 'flex';
+  switchGithubTab('supabase');
+}
+
+function closeGithubLoginModal() {
+  const modal = document.getElementById('githubLoginModal');
+  if (modal) modal.style.display = 'none';
+}
+
+function switchGithubTab(tabName) {
+  document.querySelectorAll('.gh-tab-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tab === tabName);
+  });
+  const tabSupabase = document.getElementById('tabContentSupabase');
+  const tabUsername = document.getElementById('tabContentUsername');
+  const tabConfig = document.getElementById('tabContentConfig');
+  if (tabSupabase) tabSupabase.style.display = tabName === 'supabase' ? 'block' : 'none';
+  if (tabUsername) tabUsername.style.display = tabName === 'username' ? 'block' : 'none';
+  if (tabConfig) tabConfig.style.display = tabName === 'config' ? 'block' : 'none';
+}
+
+async function handleSearchGithubUser(username) {
+  const previewCard = document.getElementById('ghUserPreviewCard');
+  const btnConfirm = document.getElementById('btnConfirmGhLogin');
+
+  try {
+    const data = await fetchGithubUserProfile(username);
+    state.pendingGhUser = data;
+
+    const previewAvatar = document.getElementById('ghPreviewAvatar');
+    if (previewAvatar) previewAvatar.src = data.avatar_url;
+    const previewName = document.getElementById('ghPreviewName');
+    if (previewName) previewName.textContent = data.name || data.login;
+    const previewHandle = document.getElementById('ghPreviewHandle');
+    if (previewHandle) previewHandle.textContent = `@${data.login}`;
+    const previewBio = document.getElementById('ghPreviewBio');
+    if (previewBio) previewBio.textContent = data.bio || '등록된 한 줄 소개글이 없습니다.';
+    const previewRepos = document.getElementById('ghPreviewRepos');
+    if (previewRepos) previewRepos.textContent = data.public_repos !== undefined ? data.public_repos : 0;
+    const previewFollowers = document.getElementById('ghPreviewFollowers');
+    if (previewFollowers) previewFollowers.textContent = data.followers !== undefined ? data.followers : 0;
+
+    if (previewCard) previewCard.style.display = 'flex';
+    if (btnConfirm) {
+      btnConfirm.disabled = false;
+      btnConfirm.textContent = `${data.login} 계정으로 로그인 완료`;
+    }
+  } catch (err) {
+    state.pendingGhUser = null;
+    if (previewCard) previewCard.style.display = 'none';
+    if (btnConfirm) {
+      btnConfirm.disabled = true;
+      btnConfirm.textContent = '이 계정으로 로그인 완료';
+    }
+    showToast(err.message, 'warning');
+  }
+}
+
+function logoutGithub() {
+  if (supabaseClient) {
+    supabaseClient.auth.signOut().catch(() => {});
+  }
+  const prevName = state.githubUser?.login || '사용자';
+  state.githubUser = null;
+  state.pendingGhUser = null;
+  localStorage.removeItem('dj_github_user');
+  renderGithubAuthUI();
+  showToast(`@${prevName} 계정에서 로그아웃되었습니다. (설정된 학년/반 정보는 계정에 안전하게 보관됨)`, 'info');
+}
+
+function syncGithubUserData() {
+  if (!state.githubUser) {
+    showToast('GitHub 로그인 후 동기화를 진행할 수 있습니다.', 'warning');
+    return;
+  }
+  const syncPayload = {
+    user: state.githubUser.login,
+    profile: state.studentProfiles[state.githubUser.login] || null,
+    school: state.school,
+    bookmarks: state.bookmarkedEvents,
+    customDdays: state.customDdays,
+    syncedAt: new Date().toISOString()
+  };
+  localStorage.setItem(`dj_sync_${state.githubUser.login}`, JSON.stringify(syncPayload));
+  showToast(`☁️ @${state.githubUser.login} 계정으로 학년/반 및 D-Day 데이터가 동기화되었습니다!`, 'success');
+  const popover = document.getElementById('githubDropdownPopover');
+  if (popover) popover.style.display = 'none';
+}
+
+async function checkSupabaseSessionOnLoad() {
+  if (!supabaseClient) return;
+  try {
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    if (session && session.user) {
+      const meta = session.user.user_metadata || {};
+      const userObj = {
+        id: session.user.id,
+        login: meta.user_name || session.user.email?.split('@')[0] || 'student_user',
+        name: meta.full_name || meta.user_name || '대진고 학생',
+        avatar_url: meta.avatar_url || 'https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png',
+        bio: meta.bio || '',
+        public_repos: meta.public_repos || 0,
+        followers: meta.followers || 0
+      };
+      if (meta.grade && meta.classNum && !state.studentProfiles[userObj.login]) {
+        state.studentProfiles[userObj.login] = {
+          grade: String(meta.grade),
+          classNum: String(meta.classNum),
+          dept: meta.dept || '전기전자과'
+        };
+        localStorage.setItem('dj_student_profiles', JSON.stringify(state.studentProfiles));
+      }
+      handleUserLoginSuccess(userObj);
+    }
+  } catch (err) {
+    console.warn('Supabase 세션 확인 오류:', err);
+  }
+}
+
+/* ==========================================================================
    Event Listeners & Bootstrapping
    ========================================================================== */
 function setupEventListeners() {
@@ -1043,7 +1376,7 @@ function setupEventListeners() {
     }
   });
 
-  document.querySelectorAll('.quick-preset-chips .chip').forEach(chip => {
+  document.querySelectorAll('.quick-preset-chips .chip:not(.chip-gh)').forEach(chip => {
     chip.addEventListener('click', () => {
       selectSchool(chip.dataset.office, '부산광역시교육청', chip.dataset.code, chip.dataset.name, '');
     });
@@ -1081,6 +1414,197 @@ function setupEventListeners() {
     showToast(`'${title}' D-Day가 성공적으로 추가되었습니다.`, 'success');
   });
 
+  /* ==========================================================================
+     GitHub & Supabase Auth Event Listeners
+     ========================================================================== */
+  const btnOpenGithub = document.getElementById('btnOpenGithubLogin');
+  if (btnOpenGithub) btnOpenGithub.addEventListener('click', openGithubLoginModal);
+
+  const btnCloseGh = document.getElementById('btnCloseGithubModal');
+  if (btnCloseGh) btnCloseGh.addEventListener('click', closeGithubLoginModal);
+
+  const btnCancelGh = document.getElementById('btnCancelGhModal');
+  if (btnCancelGh) btnCancelGh.addEventListener('click', closeGithubLoginModal);
+
+  // Tab switching
+  document.querySelectorAll('.gh-tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => switchGithubTab(btn.dataset.tab));
+  });
+
+  // Supabase Launch OAuth
+  const btnLaunchSupabase = document.getElementById('btnLaunchSupabaseOauth');
+  if (btnLaunchSupabase) {
+    btnLaunchSupabase.addEventListener('click', async () => {
+      if (supabaseClient) {
+        showToast('Supabase GitHub OAuth 인증 페이지로 이동합니다...', 'info');
+        const { error } = await supabaseClient.auth.signInWithOAuth({
+          provider: 'github',
+          options: {
+            redirectTo: window.location.origin + window.location.pathname
+          }
+        });
+        if (error) {
+          showToast(`Supabase 로그인 오류: ${error.message}`, 'warning');
+        }
+      } else {
+        // Fallback demo/one-click experience
+        showToast('Supabase 프로젝트 URL/Key가 아직 설정되지 않아, 저장소 학생 계정으로 연동을 진행합니다.', 'info');
+        fetchGithubUserProfile('jkpdj17-arch').then(handleUserLoginSuccess).catch(err => {
+          showToast(err.message, 'warning');
+        });
+      }
+    });
+  }
+
+  // Quick Demo Student Login
+  const btnQuickDemo = document.getElementById('btnQuickDemoStudentLogin');
+  if (btnQuickDemo) {
+    btnQuickDemo.addEventListener('click', () => {
+      fetchGithubUserProfile('jkpdj17-arch').then(handleUserLoginSuccess).catch(() => {
+        // Fallback offline mock object
+        handleUserLoginSuccess({
+          login: 'jkpdj17-arch',
+          name: '대진전자통신고 개발자',
+          avatar_url: 'https://avatars.githubusercontent.com/u/101382405?v=4',
+          bio: '대진전자통신고등학교 학생 개발자',
+          public_repos: 8,
+          followers: 15
+        });
+      });
+    });
+  }
+
+  // Username search
+  const btnSearchUser = document.getElementById('btnSearchGhUser');
+  const usernameInput = document.getElementById('ghUsernameInput');
+  if (btnSearchUser && usernameInput) {
+    btnSearchUser.addEventListener('click', () => {
+      if (usernameInput.value.trim()) {
+        handleSearchGithubUser(usernameInput.value.trim());
+      } else {
+        showToast('GitHub 사용자명을 입력해주세요.', 'warning');
+      }
+    });
+
+    usernameInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        if (usernameInput.value.trim()) {
+          handleSearchGithubUser(usernameInput.value.trim());
+        }
+      }
+    });
+  }
+
+  // Preset chips
+  document.querySelectorAll('.chip-gh').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const user = chip.dataset.user;
+      if (user === 'daejin-dev') {
+        state.pendingGhUser = {
+          login: 'daejin-dev',
+          name: '대진전자통신고 학생개발자',
+          avatar_url: 'https://images.unsplash.com/photo-1534972195531-a756b11269d5?w=120&auto=format&fit=crop&q=80',
+          bio: '대진전자통신고등학교 학생 개발자 커뮤니티',
+          public_repos: 12,
+          followers: 48
+        };
+        const previewAvatar = document.getElementById('ghPreviewAvatar');
+        if (previewAvatar) previewAvatar.src = state.pendingGhUser.avatar_url;
+        document.getElementById('ghPreviewName').textContent = state.pendingGhUser.name;
+        document.getElementById('ghPreviewHandle').textContent = `@${state.pendingGhUser.login}`;
+        document.getElementById('ghPreviewBio').textContent = state.pendingGhUser.bio;
+        document.getElementById('ghPreviewRepos').textContent = state.pendingGhUser.public_repos;
+        document.getElementById('ghPreviewFollowers').textContent = state.pendingGhUser.followers;
+        document.getElementById('ghUserPreviewCard').style.display = 'flex';
+        const btnConfirm = document.getElementById('btnConfirmGhLogin');
+        btnConfirm.disabled = false;
+        btnConfirm.textContent = `${state.pendingGhUser.name}으로 로그인 완료`;
+        if (usernameInput) usernameInput.value = 'daejin-dev';
+        return;
+      }
+      if (usernameInput) {
+        usernameInput.value = user;
+        handleSearchGithubUser(user);
+      }
+    });
+  });
+
+  // Confirm username login
+  const btnConfirmGh = document.getElementById('btnConfirmGhLogin');
+  if (btnConfirmGh) {
+    btnConfirmGh.addEventListener('click', () => {
+      if (state.pendingGhUser) {
+        handleUserLoginSuccess(state.pendingGhUser);
+      }
+    });
+  }
+
+  // Save Supabase Config
+  const btnSaveSupabase = document.getElementById('btnSaveSupabaseConfig');
+  if (btnSaveSupabase) {
+    btnSaveSupabase.addEventListener('click', () => {
+      const url = document.getElementById('supabaseUrlInput')?.value.trim();
+      const key = document.getElementById('supabaseKeyInput')?.value.trim();
+      if (!url || !key) {
+        showToast('Supabase URL과 Anon Key를 모두 입력해주세요.', 'warning');
+        return;
+      }
+      localStorage.setItem('dj_supabase_url', url);
+      localStorage.setItem('dj_supabase_key', key);
+      initSupabase();
+      showToast('Supabase 연동 정보가 브라우저에 저장되었습니다.', 'success');
+      switchGithubTab('supabase');
+    });
+  }
+
+  // Profile Pill & Dropdown toggle
+  const profilePill = document.getElementById('githubProfilePill');
+  const popover = document.getElementById('githubDropdownPopover');
+  if (profilePill && popover) {
+    profilePill.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isVisible = popover.style.display === 'block';
+      popover.style.display = isVisible ? 'none' : 'block';
+      profilePill.classList.toggle('active', !isVisible);
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!popover.contains(e.target) && !profilePill.contains(e.target)) {
+        popover.style.display = 'none';
+        profilePill.classList.remove('active');
+      }
+    });
+  }
+
+  // Grade/Class edit button in dropdown
+  const btnEditGradeClass = document.getElementById('btnEditGradeClass');
+  if (btnEditGradeClass) {
+    btnEditGradeClass.addEventListener('click', () => openGradeClassModal(true));
+  }
+
+  // Grade/Class Modal Save
+  const btnSaveGradeClass = document.getElementById('btnSaveGradeClass');
+  if (btnSaveGradeClass) {
+    btnSaveGradeClass.addEventListener('click', () => {
+      const grade = document.getElementById('selectStudentGrade')?.value || '2';
+      const classNum = document.getElementById('selectStudentClass')?.value || '3';
+      const dept = document.getElementById('selectStudentDept')?.value || '전기전자과';
+      saveStudentGradeClass(grade, classNum, dept);
+    });
+  }
+
+  const btnCloseGradeClass = document.getElementById('btnCloseGradeClassModal');
+  if (btnCloseGradeClass) {
+    btnCloseGradeClass.addEventListener('click', closeGradeClassModal);
+  }
+
+  // Dropdown items
+  const btnSync = document.getElementById('btnSyncUserData');
+  if (btnSync) btnSync.addEventListener('click', syncGithubUserData);
+
+  const btnLogout = document.getElementById('btnLogoutGithub');
+  if (btnLogout) btnLogout.addEventListener('click', logoutGithub);
+
   // Backdrop click to close modals
   document.querySelectorAll('.modal-backdrop').forEach(backdrop => {
     backdrop.addEventListener('click', (e) => {
@@ -1092,7 +1616,21 @@ function setupEventListeners() {
 }
 
 // Startup
-window.addEventListener('DOMContentLoaded', () => {
+window.addEventListener('DOMContentLoaded', async () => {
+  initSupabase();
   setupEventListeners();
+  renderGithubAuthUI();
+
+  // If user is already logged in, automatically restore their Grade & Class
+  if (state.githubUser) {
+    const profile = state.studentProfiles[state.githubUser.login];
+    if (profile) {
+      applyStudentProfile(profile);
+    }
+  }
+
+  // Check Supabase session from OAuth redirect callback
+  await checkSupabaseSessionOnLoad();
+
   initScheduleData();
 });

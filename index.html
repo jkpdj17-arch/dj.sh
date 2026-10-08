@@ -9,6 +9,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700;800&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
+  <!-- Supabase JS Client SDK -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
   <div class="app-shell">
@@ -50,6 +52,83 @@
           <span>맞춤 브리핑 알림</span>
           <span class="active-badge-indicator" id="notifActiveIndicator" style="display:none;">ON</span>
         </button>
+
+        <!-- GitHub Authentication Section -->
+        <div class="github-auth-wrapper" id="githubAuthWrapper">
+          <!-- Logged-out State: GitHub Login Button -->
+          <button class="btn btn-github" id="btnOpenGithubLogin" title="GitHub 계정 로그인 및 연동">
+            <svg class="github-icon" width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+              <path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/>
+            </svg>
+            <span>GitHub 로그인</span>
+          </button>
+
+          <!-- Logged-in State: User Profile Pill -->
+          <div class="github-profile-pill" id="githubProfilePill" style="display:none;" title="사용자 계정 메뉴">
+            <img id="githubUserAvatar" class="github-avatar-img" src="" alt="GitHub Avatar">
+            <div class="github-user-info-text">
+              <span class="github-login-name" id="githubUserLogin">사용자</span>
+              <span class="github-student-badge" id="githubUserGradeClass">학적 설정 필요</span>
+            </div>
+            <svg class="chevron-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </div>
+
+          <!-- Dropdown Popover Menu -->
+          <div class="github-dropdown-popover" id="githubDropdownPopover" style="display:none;">
+            <div class="dropdown-user-header">
+              <img id="dropdownAvatar" class="dropdown-avatar-lg" src="" alt="Avatar">
+              <div class="dropdown-user-meta">
+                <div class="dropdown-name" id="dropdownUserName">이름</div>
+                <div class="dropdown-handle" id="dropdownUserHandle">@username</div>
+              </div>
+            </div>
+
+            <!-- Student Grade & Class Card -->
+            <div class="dropdown-student-card">
+              <div class="student-card-left">
+                <span class="student-card-icon">🎓</span>
+                <div>
+                  <div class="student-card-title">내 소속 학급</div>
+                  <div class="student-card-val" id="dropdownStudentGradeClass">설정되지 않음</div>
+                </div>
+              </div>
+              <button class="btn btn-xs btn-outline" id="btnEditGradeClass">수정</button>
+            </div>
+
+            <p class="dropdown-bio" id="dropdownUserBio">GitHub 계정 소개</p>
+            <div class="dropdown-stats-row">
+              <div class="stat-box">
+                <span class="stat-number" id="dropdownRepoCount">0</span>
+                <span class="stat-label">저장소</span>
+              </div>
+              <div class="stat-box">
+                <span class="stat-number" id="dropdownFollowerCount">0</span>
+                <span class="stat-label">팔로워</span>
+              </div>
+              <div class="stat-box">
+                <span class="stat-number" id="dropdownBookmarkCount">0</span>
+                <span class="stat-label">내 D-Day</span>
+              </div>
+            </div>
+            <div class="dropdown-menu-list">
+              <a href="#" target="_blank" rel="noopener noreferrer" class="dropdown-item" id="linkGithubProfile">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                <span>GitHub 프로필 방문</span>
+              </a>
+              <button class="dropdown-item" id="btnSyncUserData">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+                <span>내 D-Day & 북마크 동기화</span>
+              </button>
+              <div class="dropdown-divider"></div>
+              <button class="dropdown-item text-danger" id="btnLogoutGithub">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                <span>로그아웃</span>
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </header>
 
@@ -329,6 +408,203 @@
       <div class="modal-footer">
         <button class="btn btn-ghost" id="btnCancelCustomDday">취소</button>
         <button class="btn btn-primary" id="btnSaveCustomDday">추가하기</button>
+      </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: GitHub & Supabase Login Modal -->
+  <div class="modal-backdrop" id="githubLoginModal" style="display:none;">
+    <div class="modal-window github-modal-window">
+      <div class="modal-header">
+        <div class="github-modal-title-wrap">
+          <div class="github-title-icon-badge">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+              <path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/>
+            </svg>
+          </div>
+          <div>
+            <h3>Supabase GitHub 로그인 & 연동</h3>
+            <p class="modal-sub">GitHub 계정으로 로그인하여 소속 학년/반과 맞춤 학사일정을 동기화하세요.</p>
+          </div>
+        </div>
+        <button class="modal-close" id="btnCloseGithubModal">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <!-- Tab Navigation -->
+        <div class="gh-tab-nav">
+          <button class="gh-tab-btn active" data-tab="supabase">Supabase GitHub 로그인</button>
+          <button class="gh-tab-btn" data-tab="username">GitHub 아이디 연동</button>
+          <button class="gh-tab-btn" data-tab="config">Supabase 연동 설정</button>
+        </div>
+
+        <!-- Tab 1: Supabase GitHub OAuth Flow -->
+        <div class="gh-tab-content active" id="tabContentSupabase">
+          <div class="supabase-status-banner">
+            <span class="pulse-dot"></span>
+            <span id="supabaseStatusText">Supabase Auth 연동 준비 완료</span>
+          </div>
+
+          <p class="modal-instruction">
+            Supabase 공식 OAuth를 통해 GitHub 계정으로 안전하게 로그인합니다. 로그인 후 소속 학년과 반을 설정하면, 다음 로그인 시에도 학적 정보가 그대로 복원됩니다.
+          </p>
+
+          <div class="oauth-launch-container">
+            <button class="btn btn-github btn-lg" id="btnLaunchSupabaseOauth">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/>
+              </svg>
+              <span>Supabase로 GitHub 로그인</span>
+            </button>
+            <p class="oauth-hint">GitHub 인증 창으로 이동하여 인가를 완료합니다.</p>
+          </div>
+
+          <div class="oauth-divider-row">
+            <span>또는 빠른 체험 및 테스트</span>
+          </div>
+
+          <div class="quick-demo-login-box">
+            <button class="btn btn-secondary" id="btnQuickDemoStudentLogin" style="width:100%;">
+              <span>⚡ 빠른 학생 데모 계정으로 체험 로그인</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Tab 2: Direct Username Lookup Flow -->
+        <div class="gh-tab-content" id="tabContentUsername" style="display:none;">
+          <p class="modal-instruction">
+            GitHub 사용자명을 직접 입력하여 실제 GitHub 프로필 정보를 불러와 즉시 연동합니다.
+          </p>
+
+          <div class="search-input-wrapper">
+            <input type="text" id="ghUsernameInput" class="text-input" placeholder="GitHub 사용자명 (예: jkpdj17-arch, octocat)" value="jkpdj17-arch">
+            <button class="btn btn-primary" id="btnSearchGhUser">조회</button>
+          </div>
+
+          <div class="quick-preset-chips">
+            <span class="preset-label">추천/프리셋:</span>
+            <button class="chip chip-gh" data-user="jkpdj17-arch">jkpdj17-arch (저장소 개발자)</button>
+            <button class="chip chip-gh" data-user="octocat">octocat (마스코트)</button>
+            <button class="chip chip-gh" data-user="daejin-dev">대진고 학생 (샘플)</button>
+          </div>
+
+          <!-- Real-time Preview Box -->
+          <div class="gh-user-preview-card" id="ghUserPreviewCard" style="display:none;">
+            <div class="preview-avatar-box">
+              <img id="ghPreviewAvatar" class="gh-preview-avatar" src="" alt="Avatar">
+            </div>
+            <div class="preview-info-box">
+              <div class="preview-name-badge">
+                <span class="preview-fullname" id="ghPreviewName"></span>
+                <span class="preview-handle" id="ghPreviewHandle"></span>
+                <span class="preview-verified">✔ 계정 확인됨</span>
+              </div>
+              <p class="preview-bio" id="ghPreviewBio">소개글이 없습니다.</p>
+              <div class="preview-stats-pills">
+                <span class="stat-pill">📦 저장소 <strong id="ghPreviewRepos">0</strong>개</span>
+                <span class="stat-pill">👥 팔로워 <strong id="ghPreviewFollowers">0</strong>명</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab 3: Supabase Config Settings -->
+        <div class="gh-tab-content" id="tabContentConfig" style="display:none;">
+          <p class="modal-instruction">
+            사용자 지정 Supabase 프로젝트를 연동하려면 아래에 프로젝트 URL과 Anon Public Key를 입력하세요. 브라우저 localStorage에 안전하게 보관됩니다.
+          </p>
+          <div class="setting-row">
+            <label class="setting-label" for="supabaseUrlInput">Supabase Project URL</label>
+            <input type="text" id="supabaseUrlInput" class="text-input" placeholder="https://your-project.supabase.co">
+          </div>
+          <div class="setting-row">
+            <label class="setting-label" for="supabaseKeyInput">Supabase Anon Key</label>
+            <input type="password" id="supabaseKeyInput" class="text-input" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...">
+          </div>
+          <button class="btn btn-primary" id="btnSaveSupabaseConfig" style="width:100%; margin-top:12px;">Supabase 설정 저장</button>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-ghost" id="btnCancelGhModal">취소</button>
+        <button class="btn btn-primary" id="btnConfirmGhLogin" disabled>이 계정으로 로그인 완료</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Student Grade & Class Onboarding Modal -->
+  <div class="modal-backdrop" id="gradeClassModal" style="display:none;">
+    <div class="modal-window grade-class-modal-window">
+      <div class="modal-header">
+        <div class="github-modal-title-wrap">
+          <div class="student-title-icon-badge">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
+              <path d="M6 12v5c3 3 9 3 12 0v-5"/>
+            </svg>
+          </div>
+          <div>
+            <h3>소속 학년 및 반 설정</h3>
+            <p class="modal-sub">로그인하신 계정에 학년과 반을 설정하면, 다시 로그인할 때도 정보가 그대로 유지됩니다.</p>
+          </div>
+        </div>
+        <button class="modal-close" id="btnCloseGradeClassModal">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="user-welcome-banner" id="gradeClassUserBanner">
+          <img id="gradeClassUserAvatar" class="banner-avatar" src="" alt="User Avatar">
+          <div>
+            <div class="banner-user-name" id="gradeClassUserName">GitHub 사용자</div>
+            <div class="banner-user-sub">계정 인증 완료 · 학사일정 맞춤 설정 단계</div>
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <label class="setting-label" for="selectStudentGrade">학년 선택</label>
+          <select id="selectStudentGrade" class="select-input">
+            <option value="1">1학년</option>
+            <option value="2" selected>2학년</option>
+            <option value="3">3학년</option>
+          </select>
+        </div>
+
+        <div class="setting-row">
+          <label class="setting-label" for="selectStudentClass">반 선택</label>
+          <select id="selectStudentClass" class="select-input">
+            <option value="1">1반</option>
+            <option value="2">2반</option>
+            <option value="3" selected>3반</option>
+            <option value="4">4반</option>
+            <option value="5">5반</option>
+            <option value="6">6반</option>
+            <option value="7">7반</option>
+            <option value="8">8반</option>
+            <option value="9">9반</option>
+            <option value="10">10반</option>
+            <option value="11">11반</option>
+            <option value="12">12반</option>
+          </select>
+        </div>
+
+        <div class="setting-row">
+          <label class="setting-label" for="selectStudentDept">학과 / 전공 (선택)</label>
+          <select id="selectStudentDept" class="select-input">
+            <option value="전기전자과">전기전자과</option>
+            <option value="AI소프트웨어과">AI소프트웨어과</option>
+            <option value="스마트콘텐츠과">스마트콘텐츠과</option>
+            <option value="산업디자인과">산업디자인과</option>
+          </select>
+        </div>
+
+        <div class="grade-class-note">
+          <p>💡 <strong>자동 기억 기능:</strong> 설정하신 학년과 반은 계정에 영구 저장됩니다. 로그아웃 후 다시 이 계정으로 로그인하시면 별도의 입력 없이 자동으로 복원되어 맞춤 일정(시험, 행사, 시간표)을 바로 확인하실 수 있습니다.</p>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-primary" id="btnSaveGradeClass" style="width: 100%;">학년 및 반 저장하고 맞춤 일정 시작하기</button>
       </div>
     </div>
   </div>
